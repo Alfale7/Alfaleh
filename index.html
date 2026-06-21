@@ -177,6 +177,8 @@ body.chart .chart-only{display:inline-flex}
 @keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .children::before{content:"";position:absolute;inset-inline-start:0;top:-2px;bottom:18px;
   border-inline-start:2px solid var(--guide,var(--line))}
+.children>.node::before{content:"";position:absolute;inset-inline-start:calc(-1 * var(--indent));
+  top:calc(3px + var(--rowH)/2);width:var(--indent);height:2px;background:var(--guide,var(--line));border-radius:2px}
 
 /* ---------- VIEW TOGGLE (segmented) ---------- */
 .seg{flex:none;display:inline-flex;background:var(--card-2);border:1px solid var(--line);border-radius:999px;padding:3px}
@@ -190,6 +192,7 @@ body.chart .chart-only{display:inline-flex}
 body.chart .chart-wrap{display:block}
 body.chart .tree-wrap{display:none}
 .chart-vp{position:relative;overflow:auto;-webkit-overflow-scrolling:touch;height:74vh;min-height:360px;
+  touch-action:none;cursor:grab;
   border:1px solid var(--line);border-radius:16px;
   background:
     radial-gradient(circle at 1px 1px, rgba(31,79,71,.07) 1px, transparent 0) 0 0/22px 22px,
@@ -773,6 +776,36 @@ viewSeg.addEventListener('click',function(e){ var b=e.target.closest('button'); 
 document.getElementById('zIn').addEventListener('click',function(){ setZoom(zoom+0.15); });
 document.getElementById('zOut').addEventListener('click',function(){ setZoom(zoom-0.15); });
 document.getElementById('zFit').addEventListener('click',fitChart);
+
+/* ---- سحب الشجرة باللمس/الماوس في كل الاتجاهات (يشتغل بملء الشاشة) ---- */
+(function(){
+  var vp=chartVp, down=false, sx=0, sy=0, sl=0, st=0, moved=false, pid=null;
+  vp.addEventListener('pointerdown',function(e){
+    if(e.button!==undefined && e.button!==0) return;
+    if(e.target.closest('.ctoggle')) return;           /* خلّ زر +/− يفتح ويقفل */
+    down=true; moved=false; pid=e.pointerId;
+    sx=e.clientX; sy=e.clientY; sl=vp.scrollLeft; st=vp.scrollTop;
+    vp.style.cursor='grabbing';
+    try{ vp.setPointerCapture(pid); }catch(_){}
+  });
+  vp.addEventListener('pointermove',function(e){
+    if(!down || e.pointerId!==pid) return;
+    var dx=e.clientX-sx, dy=e.clientY-sy;
+    if(!moved && (Math.abs(dx)+Math.abs(dy))>5) moved=true;
+    if(moved){ vp.scrollLeft=sl-dx; vp.scrollTop=st-dy; }
+  });
+  function end(e){
+    if(!down) return;
+    if(e && e.pointerId!=null && e.pointerId!==pid) return;
+    down=false; vp.style.cursor='grab';
+    try{ vp.releasePointerCapture(pid); }catch(_){}
+  }
+  vp.addEventListener('pointerup',end);
+  vp.addEventListener('pointercancel',end);
+  /* لو كان سحب (مو نقرة) امنع فتح بطاقة الشخص */
+  vp.addEventListener('click',function(e){ if(moved){ e.stopPropagation(); e.preventDefault(); moved=false; } },true);
+})();
+
 document.getElementById('rotateClose').addEventListener('click',function(){ rotateHint.classList.remove('show'); });
 window.addEventListener('orientationchange',function(){ setTimeout(function(){ updateOrient(); if(viewMode==='chart') fitChart(); },320); });
 
