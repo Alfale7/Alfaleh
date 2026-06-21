@@ -292,7 +292,7 @@ body.poster .rotate-tip.show{position:fixed;left:12px;right:12px;bottom:14px;top
   body > .chart-wrap{ display:block !important; padding:0; margin:0; max-width:none }   /* show only the tree */
   .zoom,.poster-exit,.rotate-tip,.chart-hint,.ctoggle{ display:none !important }
   .chart-vp{ height:auto !important; max-height:none !important; overflow:visible !important; border:0; border-radius:0; background:#fff !important }
-  .chart-scale{ zoom:var(--print-scale,1) !important; padding:0; width:auto; margin:0 }
+  .chart-scale{ padding:0 !important; margin:0 auto !important }
   .cnode{ box-shadow:none; border-width:1px }
   .ctree{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
 }
@@ -746,12 +746,15 @@ function prepPrint(){
   rootUid=tgt;
   buildChartAt(tgt);        /* build the graphical tree (even if currently in list view) */
   expandAllChart();         /* open everything under this root */
-  /* scale the whole subtree to fit one landscape page width (approx A4 landscape @96dpi) */
+  /* scale the subtree to fit the printable page. Target a conservative width so it never
+     clips whether the device prints landscape OR portrait. zoom is set as a real number
+     (WebKit/iOS ignores var() inside the non-standard `zoom` property). */
   chartScale.style.zoom=1;
   var W=chartScale.scrollWidth||chartScale.offsetWidth||1;
   var H=chartScale.scrollHeight||chartScale.offsetHeight||1;
-  var s=Math.min(1000/W, 720/H, 1);
+  var s=Math.min(700/W, 1000/H, 1);
   if(!isFinite(s)||s<=0) s=1;
+  chartScale.style.zoom=s;
   document.documentElement.style.setProperty('--print-scale', String(s));
 }
 function restorePrint(){
@@ -760,6 +763,7 @@ function restorePrint(){
   document.documentElement.style.removeProperty('--print-scale');
   viewMode=_printPrevView; 
   renderRoot(_printPrevRoot==null?DATA.u:_printPrevRoot);
+  try{ if(viewMode==='chart'){ fitChart(); } else { chartScale.style.zoom=1; } }catch(e){ chartScale.style.zoom=1; }
   _printPrevRoot=null; _printPrevView=null;
 }
 /* runs for BOTH our button and the browser's own print (Ctrl/Cmd+P or share→print) */
