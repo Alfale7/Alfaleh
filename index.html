@@ -292,7 +292,7 @@ body.poster .rotate-tip.show{position:fixed;left:12px;right:12px;bottom:14px;top
   body > .chart-wrap{ display:block !important; padding:0; margin:0; max-width:none }   /* show only the tree */
   .zoom,.poster-exit,.rotate-tip,.chart-hint,.ctoggle{ display:none !important }
   .chart-vp{ height:auto !important; max-height:none !important; overflow:visible !important; border:0; border-radius:0; background:#fff !important }
-  .chart-scale{ zoom:1 !important; padding:4mm; width:auto; margin:0 }
+  .chart-scale{ zoom:var(--print-scale,1) !important; padding:0; width:auto; margin:0 }
   .cnode{ box-shadow:none; border-width:1px }
   .ctree{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
 }
@@ -340,7 +340,7 @@ body.poster .rotate-tip.show{position:fixed;left:12px;right:12px;bottom:14px;top
 .kidchip .mini.m{background:var(--teal)}.kidchip .mini.f{background:var(--rose)}
 .kidchip .kc{color:var(--text-soft);font-size:12px;font-family:'Reem Kufi'}
 
-.sheet-actions{display:flex;gap:10px;margin-top:18px}
+.sheet-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 .btn{flex:1;border:0;border-radius:12px;padding:13px;font-family:'Tajawal';font-weight:700;font-size:15px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;gap:8px;transition:filter .15s,transform .06s}
 .btn:active{transform:translateY(1px)}
@@ -348,6 +348,8 @@ body.poster .rotate-tip.show{position:fixed;left:12px;right:12px;bottom:14px;top
 .btn.primary:hover{filter:brightness(1.12)}
 .btn.ghost{background:var(--card-2);color:var(--ink-2);border:1px solid var(--line)}
 .btn.ghost:hover{background:var(--card)}
+.btn.pdf{flex-basis:100%;background:var(--gold);color:#fff}
+.btn.pdf:hover{filter:brightness(1.08)}
 
 /* legend popover (reuse sheet style as a small modal) */
 .modal{position:fixed;inset:0;z-index:65;display:none;align-items:center;justify-content:center;padding:18px}
@@ -733,17 +735,29 @@ function exitPoster(){
 document.getElementById('fullChip').addEventListener('click',enterPoster);
 document.getElementById('posterExit').addEventListener('click',exitPoster);
 
-/* ----- export whole tree as a large landscape PDF poster (browser print) ----- */
-var _printPrevRoot=null,_printPrevView=null,_prepped=false;
+/* ----- export as landscape PDF (browser print). Prints whatever branch is shown,
+        or a specific person's descendants when chosen from the detail sheet. ----- */
+var _printPrevRoot=null,_printPrevView=null,_prepped=false,_printRoot=null;
 function prepPrint(){
   if(_prepped) return; _prepped=true;
   _printPrevRoot=rootUid; _printPrevView=viewMode;
-  rootUid=DATA.u;
-  buildChartAt(DATA.u);     /* build the graphical tree (even if currently in list view) */
-  expandAllChart();         /* open the whole tree for the poster */
+  var tgt=(_printRoot!=null?_printRoot:rootUid);   /* chosen branch, else the displayed root */
+  if(tgt==null) tgt=DATA.u;
+  rootUid=tgt;
+  buildChartAt(tgt);        /* build the graphical tree (even if currently in list view) */
+  expandAllChart();         /* open everything under this root */
+  /* scale the whole subtree to fit one landscape page width (approx A4 landscape @96dpi) */
+  chartScale.style.zoom=1;
+  var W=chartScale.scrollWidth||chartScale.offsetWidth||1;
+  var H=chartScale.scrollHeight||chartScale.offsetHeight||1;
+  var s=Math.min(1000/W, 720/H, 1);
+  if(!isFinite(s)||s<=0) s=1;
+  document.documentElement.style.setProperty('--print-scale', String(s));
 }
 function restorePrint(){
   if(!_prepped) return; _prepped=false;
+  _printRoot=null;
+  document.documentElement.style.removeProperty('--print-scale');
   viewMode=_printPrevView; 
   renderRoot(_printPrevRoot==null?DATA.u:_printPrevRoot);
   _printPrevRoot=null; _printPrevView=null;
@@ -755,6 +769,7 @@ function exportPoster(){
   prepPrint();
   setTimeout(function(){ try{ window.print(); }catch(e){} setTimeout(restorePrint,1000); }, 250);
 }
+function printBranch(uid){ _printRoot=uid; exportPoster(); }
 document.getElementById('exportChip').addEventListener('click',exportPoster);
 
 /* ---- breadcrumbs (focus mode) ---- */
@@ -808,6 +823,9 @@ function openDetail(uid){
   var focusBtn = kidsCount
     ? '<button class="btn primary" id="focusBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>اعرض هذا الفرع فقط</button>'
     : '';
+  var printBtn = kidsCount
+    ? '<button class="btn pdf" id="printBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z"/></svg>اطبع ذرية '+esc(node.n)+' (PDF)</button>'
+    : '';
 
   sheetIn.innerHTML =
     '<div class="sheet-head">'+
@@ -823,6 +841,7 @@ function openDetail(uid){
     kidsHtml+
     '<div class="sheet-actions">'+focusBtn+
       '<button class="btn ghost" id="gotoBtn">عرضه في الشجرة</button>'+
+      printBtn+
     '</div>';
 
   // wire
@@ -832,6 +851,8 @@ function openDetail(uid){
   });
   var fb=sheetIn.querySelector('#focusBtn');
   if(fb) fb.addEventListener('click',function(){ closeDetail(); renderRoot(uid); window.scrollTo({top:0,behavior:'smooth'}); });
+  var pb=sheetIn.querySelector('#printBtn');
+  if(pb) pb.addEventListener('click',function(){ closeDetail(); if(viewMode!=='chart') setView('chart'); setTimeout(function(){ printBranch(uid); },120); });
   sheetIn.querySelector('#gotoBtn').addEventListener('click',function(){ closeDetail(); setTimeout(function(){expandToNode(uid);},340); });
 
   sheet.classList.add('show'); backdrop.classList.add('show');
