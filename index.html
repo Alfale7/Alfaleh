@@ -284,17 +284,17 @@ body.poster .poster-exit{display:inline-flex}
 .poster-exit:active{transform:scale(.96)}
 body.poster .rotate-tip.show{position:fixed;left:12px;right:12px;bottom:14px;top:auto;z-index:92;margin:0;max-width:none}
 
-/* ---------- PRINT / PDF POSTER (whole tree, vector text) ---------- */
+/* ---------- PRINT / PDF POSTER (whole tree, vector text) — applies to ANY print ---------- */
 @media print{
   @page{ size: landscape; margin: 6mm; }
   html,body{ background:#fff !important; }
-  body.printing > *:not(.chart-wrap){ display:none !important; }
-  body.printing .chart-wrap{ display:block; padding:0; margin:0; max-width:none }
-  body.printing .zoom,body.printing .poster-exit,body.printing .rotate-tip,body.printing .chart-hint,body.printing .ctoggle{ display:none !important }
-  body.printing .chart-vp{ height:auto !important; max-height:none !important; overflow:visible !important; border:0; border-radius:0; background:#fff !important }
-  body.printing .chart-scale{ zoom:1 !important; padding:4mm; width:auto; margin:0 }
-  body.printing .cnode{ box-shadow:none; border-width:1px }
-  body.printing .ctree{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  body > *{ display:none !important; }                 /* hide EVERYTHING (header, search, menus, sheet) */
+  body > .chart-wrap{ display:block !important; padding:0; margin:0; max-width:none }   /* show only the tree */
+  .zoom,.poster-exit,.rotate-tip,.chart-hint,.ctoggle{ display:none !important }
+  .chart-vp{ height:auto !important; max-height:none !important; overflow:visible !important; border:0; border-radius:0; background:#fff !important }
+  .chart-scale{ zoom:1 !important; padding:4mm; width:auto; margin:0 }
+  .cnode{ box-shadow:none; border-width:1px }
+  .ctree{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
 }
 
 /* ---------- DETAIL SHEET ---------- */
@@ -734,21 +734,27 @@ document.getElementById('fullChip').addEventListener('click',enterPoster);
 document.getElementById('posterExit').addEventListener('click',exitPoster);
 
 /* ----- export whole tree as a large landscape PDF poster (browser print) ----- */
-var _printPrevRoot=null;
+var _printPrevRoot=null,_printPrevView=null,_prepped=false;
+function prepPrint(){
+  if(_prepped) return; _prepped=true;
+  _printPrevRoot=rootUid; _printPrevView=viewMode;
+  rootUid=DATA.u;
+  buildChartAt(DATA.u);     /* build the graphical tree (even if currently in list view) */
+  expandAllChart();         /* open the whole tree for the poster */
+}
+function restorePrint(){
+  if(!_prepped) return; _prepped=false;
+  viewMode=_printPrevView; 
+  renderRoot(_printPrevRoot==null?DATA.u:_printPrevRoot);
+  _printPrevRoot=null; _printPrevView=null;
+}
+/* runs for BOTH our button and the browser's own print (Ctrl/Cmd+P or share→print) */
+window.addEventListener('beforeprint', prepPrint);
+window.addEventListener('afterprint', restorePrint);
 function exportPoster(){
-  if(viewMode!=='chart') setView('chart');
-  _printPrevRoot=rootUid;
-  renderRoot(DATA.u);
-  expandAllChart();
-  document.body.classList.add('printing');
-  setTimeout(function(){ try{ window.print(); }catch(e){} }, 300);
+  prepPrint();
+  setTimeout(function(){ try{ window.print(); }catch(e){} setTimeout(restorePrint,1000); }, 250);
 }
-function afterPrint(){
-  if(!document.body.classList.contains('printing')) return;
-  document.body.classList.remove('printing');
-  if(_printPrevRoot!=null){ renderRoot(_printPrevRoot); _printPrevRoot=null; }
-}
-window.addEventListener('afterprint', afterPrint);
 document.getElementById('exportChip').addEventListener('click',exportPoster);
 
 /* ---- breadcrumbs (focus mode) ---- */
