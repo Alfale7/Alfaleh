@@ -210,14 +210,16 @@ body.chart .chart-only{display:inline-flex}
 .chart-wrap{max-width:var(--maxw);margin:0 auto;padding:14px 14px 30px;position:relative;display:none}
 body.chart .chart-wrap{display:block}
 body.chart .tree-wrap{display:none}
-.chart-vp{position:relative;overflow:hidden;height:74vh;min-height:360px;
-  touch-action:none;cursor:grab;
+.chart-vp{position:relative;overflow:auto;-webkit-overflow-scrolling:touch;height:74vh;min-height:360px;
+  touch-action:pan-x pan-y;cursor:default;
   border:1px solid var(--line);border-radius:16px;
   background:
     radial-gradient(circle at 1px 1px, rgba(31,79,71,.07) 1px, transparent 0) 0 0/22px 22px,
     linear-gradient(180deg,#fbf7ec,#f5efe1)}
-.chart-scale{width:max-content;margin:0;padding:30px 40px 60px}
-#chartPan{position:absolute;top:0;left:0;transform-origin:0 0;transition:transform .16s ease;will-change:transform}
+.chart-scale{width:max-content;margin:0 auto;padding:30px 40px 60px}
+#chartPan{transition:transform .16s ease;will-change:transform}
+body.poster #chartPan{position:absolute;top:0;left:0;transform-origin:0 0}
+body.poster .chart-vp{overflow:hidden;touch-action:none;cursor:grab}
 
 .ctree{direction:ltr}                         /* LTR layout = correct connectors; card text stays RTL */
 .ctree, .ctree ul{position:relative;margin:0;padding:0;list-style:none}
@@ -533,7 +535,7 @@ body.radial #expandChip,body.radial #collapseChip{display:none}
       </div>
     </div>
   </div>
-  <div class="chart-hint">قرّب بإصبعين للتكبير · اسحب للتنقّل · اضغط ( + ) بجانب الاسم لإظهار أبنائه · اضغط على الاسم لعرض نسبه وتفاصيله · « ملء الشاشة » يعرض الشجرة كاملة</div>
+  <div class="chart-hint">اضغط ( + ) بجانب الاسم لإظهار أبنائه · اضغط على الاسم لعرض نسبه وتفاصيله · « ملء الشاشة » للتكبير بإصبعين والتنقّل بالسحب
 </div>
 
 <div class="rwrap">
@@ -726,6 +728,7 @@ function renderRoot(uid){
 /* ----- zoom + pan (chart) — transform-based so touch works on iOS/iPad ----- */
 var chartPan=document.getElementById('chartPan');
 var panX=0, panY=0;
+function isPoster(){ return document.body.classList.contains('poster'); }
 function applyTransform(){ chartPan.style.transform='translate('+Math.round(panX)+'px,'+Math.round(panY)+'px) scale('+zoom+')'; }
 function clampPan(){
   var vw=chartVp.clientWidth, vh=chartVp.clientHeight;
@@ -733,22 +736,38 @@ function clampPan(){
   if(W<=vw) panX=(vw-W)/2; else panX=Math.max(vw-keep-W, Math.min(keep, panX));
   if(H<=vh) panY=20;        else panY=Math.max(vh-keep-H, Math.min(keep, panY));
 }
-function applyZoom(){ clampPan(); applyTransform(); }   /* kept for compatibility */
+function applyZoom(){ if(isPoster()){ clampPan(); applyTransform(); } else { chartScale.style.zoom=zoom; } }
 function setZoom(z){
   var nz=Math.max(0.12, Math.min(1.8, +(+z).toFixed(2)));
-  var vw=chartVp.clientWidth, vh=chartVp.clientHeight, cx=vw/2, cy=vh/2;
-  var px=(cx-panX)/zoom, py=(cy-panY)/zoom;      /* keep the point under the centre fixed */
-  zoom=nz; panX=cx-px*zoom; panY=cy-py*zoom;
-  clampPan(); applyTransform();
+  if(isPoster()){
+    var vw=chartVp.clientWidth, vh=chartVp.clientHeight, cx=vw/2, cy=vh/2;
+    var px=(cx-panX)/zoom, py=(cy-panY)/zoom;      /* keep the point under the centre fixed */
+    zoom=nz; panX=cx-px*zoom; panY=cy-py*zoom; clampPan(); applyTransform();
+  } else {
+    var vw2=chartVp.clientWidth, vh2=chartVp.clientHeight;
+    var rx=(chartVp.scrollLeft+vw2/2)/(chartScale.offsetWidth||1);
+    var ry=(chartVp.scrollTop+vh2/2)/(chartScale.offsetHeight||1);
+    zoom=nz; chartScale.style.zoom=zoom;
+    chartVp.scrollLeft=rx*chartScale.offsetWidth-vw2/2;
+    chartVp.scrollTop =ry*chartScale.offsetHeight-vh2/2;
+  }
 }
 function fitChart(){
   if(!document.body.classList.contains('chart')) return;
-  var W=chartScale.offsetWidth, vw=chartVp.clientWidth;
-  if(!W||!vw) return;
-  var floor=document.body.classList.contains('poster')?0.12:0.3;
-  zoom=Math.max(floor, Math.min(1, +((vw-24)/W).toFixed(3)));
-  panX=(vw-W*zoom)/2; panY=20;
-  applyTransform();
+  if(isPoster()){
+    chartScale.style.zoom='';                       /* poster scales via transform only */
+    var W=chartScale.offsetWidth, vw=chartVp.clientWidth; if(!W||!vw) return;
+    zoom=Math.max(0.12, Math.min(1, +((vw-24)/W).toFixed(3)));
+    panX=(vw-W*zoom)/2; panY=20; applyTransform();
+  } else {
+    chartPan.style.transform='';                    /* embedded uses native scroll, no transform */
+    chartScale.style.zoom=1;
+    var cw=chartScale.offsetWidth, vw3=chartVp.clientWidth; if(!cw||!vw3) return;
+    zoom=Math.max(0.4, Math.min(1, +((vw3-20)/cw).toFixed(2)));
+    chartScale.style.zoom=zoom;
+    chartVp.scrollLeft=Math.max(0,(chartScale.offsetWidth-vw3)/2);
+    chartVp.scrollTop=0;
+  }
 }
 
 /* ----- reveal a node in either view ----- */
@@ -767,10 +786,15 @@ function revealRow(r){
 function centerInChart(card){
   if(!card) return;
   var cr=card.getBoundingClientRect(), vr=chartVp.getBoundingClientRect();
-  var cardCx=cr.left+cr.width/2-vr.left, cardCy=cr.top+cr.height/2-vr.top;
-  panX += (vr.width/2 - cardCx);
-  panY += (vr.height/2 - cardCy);
-  clampPan(); applyTransform();
+  if(isPoster()){
+    var cardCx=cr.left+cr.width/2-vr.left, cardCy=cr.top+cr.height/2-vr.top;
+    panX += (vr.width/2 - cardCx);
+    panY += (vr.height/2 - cardCy);
+    clampPan(); applyTransform();
+  } else {
+    chartVp.scrollLeft += (cr.left+cr.width/2)-(vr.left+vr.width/2);
+    chartVp.scrollTop  += (cr.top+cr.height/2)-(vr.top+vr.height/2);
+  }
   card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
 }
 function isUnder(uid,root){ var c=uid; while(c!=null){ if(c===root) return true; c=parentOf.get(c); } return false; }
@@ -855,6 +879,7 @@ document.getElementById('zFit').addEventListener('click',fitChart);
   /* ----- TOUCH ----- */
   var mode=0, sx=0, sy=0, sPanX=0, sPanY=0, sDist=0, sZoom=1, sMidX=0, sMidY=0;
   vp.addEventListener('touchstart',function(e){
+    if(!isPoster()) return;                 /* الوضع العادي: تمرير الصفحة طبيعي */
     lastTouchT=Date.now();
     if(e.touches.length===1){
       if(e.target.closest && e.target.closest('.ctoggle')){ mode=0; return; } /* خلّ +/- يشتغل */
@@ -869,6 +894,7 @@ document.getElementById('zFit').addEventListener('click',fitChart);
     }
   },{passive:false});
   vp.addEventListener('touchmove',function(e){
+    if(!isPoster()) return;
     lastTouchT=Date.now();
     if(mode===1 && e.touches.length>=1){
       var dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
@@ -894,6 +920,7 @@ document.getElementById('zFit').addEventListener('click',fitChart);
   /* ----- MOUSE (desktop) ----- */
   var mdown=false, mx=0, my=0, mPanX=0, mPanY=0;
   vp.addEventListener('mousedown',function(e){
+    if(!isPoster()) return;
     if(Date.now()-lastTouchT<700) return;        /* تجاهل أحداث الماوس المُصطنعة بعد اللمس */
     if(e.button!==0) return;
     if(e.target.closest && e.target.closest('.ctoggle')) return;
@@ -908,6 +935,7 @@ document.getElementById('zFit').addEventListener('click',fitChart);
   });
   window.addEventListener('mouseup',function(){ if(mdown){ mdown=false; chartPan.style.transition=''; vp.style.cursor='grab'; } });
   vp.addEventListener('wheel',function(e){
+    if(!isPoster()) return;                      /* الوضع العادي: العجلة تمرّر الصفحة */
     e.preventDefault(); var r=vp.getBoundingClientRect();
     zoomAt(e.clientX-r.left, e.clientY-r.top, zoom*(e.deltaY<0?1.12:0.89));
   },{passive:false});
