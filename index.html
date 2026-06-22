@@ -499,7 +499,7 @@ body.radial #expandChip,body.radial #collapseChip{display:none}
   <button class="poster-exit" id="posterExit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>خروج</button>
   <div class="rotate-tip" id="rotateHint">
     <span class="ri" aria-hidden="true"></span>
-    <span>لرؤية الشجرة بشكل أوسع وأريَح — أدِر جهازك أفقيًا</span>
+    <span>قرّب بإصبعين للتكبير واسحب للتنقّل · ولرؤية أوسع أدِر جهازك أفقيًا</span>
     <button id="rotateClose" aria-label="إغلاق التنبيه">×</button>
   </div>
   <div class="zoom">
@@ -514,7 +514,7 @@ body.radial #expandChip,body.radial #collapseChip{display:none}
       </div>
     </div>
   </div>
-  <div class="chart-hint">اضغط الزر الدائري ( + ) بجانب الاسم لإظهار أبنائه · اضغط على الاسم لعرض نسبه وتفاصيله · زر « ملء الشاشة » يعرض الشجرة كاملة</div>
+  <div class="chart-hint">قرّب بإصبعين للتكبير · اسحب للتنقّل · اضغط ( + ) بجانب الاسم لإظهار أبنائه · اضغط على الاسم لعرض نسبه وتفاصيله · « ملء الشاشة » يعرض الشجرة كاملة</div>
 </div>
 
 <div class="rwrap">
@@ -822,33 +822,78 @@ document.getElementById('zIn').addEventListener('click',function(){ setZoom(zoom
 document.getElementById('zOut').addEventListener('click',function(){ setZoom(zoom-0.15); });
 document.getElementById('zFit').addEventListener('click',fitChart);
 
-/* ---- سحب الشجرة باللمس/الماوس في كل الاتجاهات (يشتغل بملء الشاشة) ---- */
+/* ---- تحريك الشجرة: سحب بإصبع + تكبير بإصبعين (لمس) + ماوس وعجلة (كمبيوتر) ---- */
 (function(){
-  var vp=chartVp, down=false, sx=0, sy=0, startX=0, startY=0, moved=false, pid=null;
-  vp.addEventListener('pointerdown',function(e){
-    if(e.button!==undefined && e.button!==0) return;
-    if(e.target.closest('.ctoggle')) return;           /* خلّ زر +/− يفتح ويقفل */
-    down=true; moved=false; pid=e.pointerId;
-    sx=e.clientX; sy=e.clientY; startX=panX; startY=panY;
-    chartPan.style.transition='none';
-    vp.style.cursor='grabbing';
-    try{ vp.setPointerCapture(pid); }catch(_){}
-  });
-  vp.addEventListener('pointermove',function(e){
-    if(!down || e.pointerId!==pid) return;
-    var dx=e.clientX-sx, dy=e.clientY-sy;
-    if(!moved && (Math.abs(dx)+Math.abs(dy))>5) moved=true;
-    if(moved){ panX=startX+dx; panY=startY+dy; clampPan(); applyTransform(); }
-  });
-  function end(e){
-    if(!down) return;
-    if(e && e.pointerId!=null && e.pointerId!==pid) return;
-    down=false; chartPan.style.transition=''; vp.style.cursor='grab';
-    try{ vp.releasePointerCapture(pid); }catch(_){}
+  var vp=chartVp, moved=false, lastTouchT=0;
+  function d2(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+  function md(a,b){ return [(a.clientX+b.clientX)/2,(a.clientY+b.clientY)/2]; }
+  function zoomAt(cx,cy,nz){    /* cx,cy in viewport px; keep that point fixed while zooming */
+    nz=Math.max(0.08, Math.min(2.2, nz));
+    var ptX=(cx-panX)/zoom, ptY=(cy-panY)/zoom;
+    zoom=nz; panX=cx-ptX*zoom; panY=cy-ptY*zoom; clampPan(); applyTransform();
   }
-  vp.addEventListener('pointerup',end);
-  vp.addEventListener('pointercancel',end);
-  /* لو كان سحب (مو نقرة) امنع فتح بطاقة الشخص */
+
+  /* ----- TOUCH ----- */
+  var mode=0, sx=0, sy=0, sPanX=0, sPanY=0, sDist=0, sZoom=1, sMidX=0, sMidY=0;
+  vp.addEventListener('touchstart',function(e){
+    lastTouchT=Date.now();
+    if(e.touches.length===1){
+      if(e.target.closest && e.target.closest('.ctoggle')){ mode=0; return; } /* خلّ +/- يشتغل */
+      mode=1; moved=false;
+      sx=e.touches[0].clientX; sy=e.touches[0].clientY; sPanX=panX; sPanY=panY;
+      chartPan.style.transition='none';
+    } else if(e.touches.length>=2){
+      mode=2; moved=true;
+      sDist=d2(e.touches[0],e.touches[1])||1; var m=md(e.touches[0],e.touches[1]);
+      sMidX=m[0]; sMidY=m[1]; sZoom=zoom; sPanX=panX; sPanY=panY;
+      chartPan.style.transition='none'; e.preventDefault();
+    }
+  },{passive:false});
+  vp.addEventListener('touchmove',function(e){
+    lastTouchT=Date.now();
+    if(mode===1 && e.touches.length>=1){
+      var dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
+      if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true;
+      if(moved){ panX=sPanX+dx; panY=sPanY+dy; clampPan(); applyTransform(); e.preventDefault(); }
+    } else if(mode===2 && e.touches.length>=2){
+      var nd=d2(e.touches[0],e.touches[1])||1, m=md(e.touches[0],e.touches[1]);
+      var r=vp.getBoundingClientRect();
+      var ptX=((sMidX-r.left)-sPanX)/sZoom, ptY=((sMidY-r.top)-sPanY)/sZoom;
+      var ncx=m[0]-r.left, ncy=m[1]-r.top;
+      zoom=Math.max(0.08, Math.min(2.2, sZoom*(nd/sDist)));
+      panX=ncx-ptX*zoom; panY=ncy-ptY*zoom; clampPan(); applyTransform(); e.preventDefault();
+    }
+  },{passive:false});
+  function endTouch(e){
+    lastTouchT=Date.now();
+    if(e.touches.length===0){ mode=0; chartPan.style.transition=''; }
+    else if(e.touches.length===1){ mode=1; sx=e.touches[0].clientX; sy=e.touches[0].clientY; sPanX=panX; sPanY=panY; }
+  }
+  vp.addEventListener('touchend',endTouch);
+  vp.addEventListener('touchcancel',endTouch);
+
+  /* ----- MOUSE (desktop) ----- */
+  var mdown=false, mx=0, my=0, mPanX=0, mPanY=0;
+  vp.addEventListener('mousedown',function(e){
+    if(Date.now()-lastTouchT<700) return;        /* تجاهل أحداث الماوس المُصطنعة بعد اللمس */
+    if(e.button!==0) return;
+    if(e.target.closest && e.target.closest('.ctoggle')) return;
+    mdown=true; moved=false; mx=e.clientX; my=e.clientY; mPanX=panX; mPanY=panY;
+    chartPan.style.transition='none'; vp.style.cursor='grabbing';
+  });
+  window.addEventListener('mousemove',function(e){
+    if(!mdown) return;
+    var dx=e.clientX-mx, dy=e.clientY-my;
+    if(!moved && (Math.abs(dx)+Math.abs(dy))>5) moved=true;
+    if(moved){ panX=mPanX+dx; panY=mPanY+dy; clampPan(); applyTransform(); }
+  });
+  window.addEventListener('mouseup',function(){ if(mdown){ mdown=false; chartPan.style.transition=''; vp.style.cursor='grab'; } });
+  vp.addEventListener('wheel',function(e){
+    e.preventDefault(); var r=vp.getBoundingClientRect();
+    zoomAt(e.clientX-r.left, e.clientY-r.top, zoom*(e.deltaY<0?1.12:0.89));
+  },{passive:false});
+
+  /* لو كان سحب/تكبير (مو نقرة) امنع فتح بطاقة الشخص */
   vp.addEventListener('click',function(e){ if(moved){ e.stopPropagation(); e.preventDefault(); moved=false; } },true);
 })();
 
