@@ -539,6 +539,7 @@ body.radial #expandChip,body.radial #collapseChip{display:none}
   </div>
   <div class="chart-hint">اضغط ( + ) بجانب الاسم لإظهار أبنائه · اضغط على الاسم لعرض نسبه وتفاصيله · « ملء الشاشة » للتكبير بإصبعين والتنقّل بالسحب
 </div>
+</div><!-- /chart-wrap -->
 
 <div class="rwrap">
   <div class="rvp" id="rvp">
@@ -1338,13 +1339,16 @@ function ensureRadial(){
   rSvg.call(rZoom).on('dblclick.zoom',null);
   rSvg.on('click',function(){ rClearHL(); });
   rSetT(rTarget());
-  /* === تشخيص مؤقّت (يُحذف بعد كشف السبب) === */
+  /* === تشخيص مؤقّت: يظهر فقط لو ظلّت الحاوية صفر === */
   try{ var _old=document.getElementById('rdbg'); if(_old) _old.remove();
-    var _dbg=document.createElement('div'); _dbg.id='rdbg';
-    _dbg.style.cssText='position:fixed;top:120px;left:8px;z-index:99999;background:#15302b;color:#f4eee1;font:12px/1.6 monospace;padding:8px 11px;border-radius:8px;direction:ltr;text-align:left;max-width:94%;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,.3)';
-    var _rv=document.getElementById('rvp'); var _tg=rTarget(); var _rb=_rv?_rv.getBoundingClientRect():null;
-    _dbg.textContent='D3:'+(rD3Ready()?'OK':'NO')+'  rvp:'+(_rv?_rv.clientWidth:'?')+'x'+(_rv?_rv.clientHeight:'?')+'\nrect:'+(_rb?Math.round(_rb.width)+'x'+Math.round(_rb.height):'?')+' top:'+(_rb?Math.round(_rb.top):'?')+'\nnodes:'+rRootH.descendants().length+'  links:'+rRootH.links().length+'\nk:'+(_tg&&isFinite(_tg.k)?_tg.k.toFixed(4):'BAD')+'  box:'+Math.round(rBox.w)+'x'+Math.round(rBox.h);
-    document.body.appendChild(_dbg);
+    var _rv=document.getElementById('rvp');
+    if(_rv && _rv.clientHeight < 50){
+      var _dbg=document.createElement('div'); _dbg.id='rdbg';
+      _dbg.style.cssText='position:fixed;top:120px;left:8px;z-index:99999;background:#b4863a;color:#15302b;font:12px/1.6 monospace;padding:8px 11px;border-radius:8px;direction:ltr;text-align:left;max-width:94%;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+      var _tg=rTarget();
+      _dbg.textContent='ما زالت صفر:\nrvp:'+_rv.clientWidth+'x'+_rv.clientHeight+'\nnodes:'+rRootH.descendants().length+'  k:'+(_tg&&isFinite(_tg.k)?_tg.k.toFixed(4):'BAD');
+      document.body.appendChild(_dbg);
+    }
   }catch(_d){}
   var zi=document.getElementById('rzin'), zo=document.getElementById('rzout'), zf=document.getElementById('rfit');
   if(zi) zi.onclick=function(){ rZoomBy(1.5); };
