@@ -427,6 +427,7 @@ footer{border-top:1px solid var(--line);background:linear-gradient(180deg,transp
 /* ===== شجرة ٢ — عرض شعاعي تفاعلي ===== */
 .rwrap{display:none;position:relative}
 body.radial .rwrap{display:block}
+body.radial .hero{display:none}                 /* وضع الشجرة الشعاعية يملأ الشاشة */
 body.radial .tree-wrap{display:none}
 body.radial .chart-wrap{display:none}
 body.radial #expandChip,body.radial #collapseChip{display:none}
@@ -460,9 +461,10 @@ body.radial #expandChip,body.radial #collapseChip{display:none}
 .rhint{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;background:#15302be8;color:#f4eee1;font-size:12px;font-weight:500;
   padding:8px 14px;border-radius:999px;z-index:5;max-width:90%;text-align:center;transition:opacity .5s}
 .rhint.hide{opacity:0;pointer-events:none}
-.r-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--ink-2);font-size:15px}
+.r-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--ink-2);font-size:15px}
+.r-sub{display:block;margin-top:8px;font-size:12.5px;color:var(--text-soft);font-weight:500;line-height:1.6}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js';s.onerror=function(){var s2=document.createElement('script');s2.src='https://unpkg.com/d3@7.8.5/dist/d3.min.js';document.head.appendChild(s2);};document.head.appendChild(s);"></script>
 </head>
 <body>
 
@@ -853,7 +855,9 @@ function setView(v){
   if(v==='radial'){
     document.body.classList.remove('poster'); rotateHint.classList.remove('show');
     ensureRadial();
-    requestAnimationFrame(function(){ if(typeof rSizeSvg==='function'){ rSizeSvg(); rFit(); } });
+    try{ window.scrollTo(0,0); }catch(e){}
+    requestAnimationFrame(function(){ if(rSvg){ rSizeSvg(); rFit(0); } });
+    setTimeout(function(){ if(viewMode==='radial' && rSvg){ rSizeSvg(); rFit(0); } }, 320);
     return;
   }
   renderRoot(rootUid);
@@ -1227,7 +1231,7 @@ legendModal.addEventListener('click',function(e){ if(e.target===legendModal) clo
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ exitPoster(); closeDetail(); closeLegend(); resBox.classList.remove('show'); } });
 
 /* ================= شجرة ٢ — شجرة حقيقية بجذع (مروحة لأعلى، D3) ================= */
-var rInit=false, rNode, rLink, rByU={}, rRootH, rZoom, rSvg, rVp, rR=950, rBox=null, rTrunkLen=800, rHintDone=false;
+var rInit=false, rNode, rLink, rByU={}, rRootH, rZoom, rSvg, rVp, rR=950, rBox=null, rTrunkLen=800, rHintDone=false, rRetryTimer=null;
 var R_SPREAD = Math.PI*5/3;   /* مروحة 300° وتُترك فجوة 60° بالأسفل ليخرج منها الجذع */
 function rXY(d){ var a=d.x-Math.PI/2; return [d.y*Math.cos(a), d.y*Math.sin(a)]; }
 function rNodeR(d){ if(d.depth===0) return 9; return Math.max(2.6, 2.6+Math.sqrt(d.data.desc||0)*0.5); }
@@ -1265,10 +1269,24 @@ function rBuildTrunk(g){
     g.append('path').attr('d','M '+x+' '+(gy+w1*0.1)+' L '+(x-2.2)+' '+(gy-hh)+' L '+(x+2.2)+' '+(gy+w1*0.1)+' Z').attr('fill', i%3? '#5f8442':'#7aa256').attr('opacity',0.95); }
   ['#d98b9a','#e6c84f','#cf7ea6','#e6c84f','#d98b9a'].forEach(function(c,i){ var x=-gw*0.55 + gw*1.1*(i/4); g.append('circle').attr('cx',x).attr('cy',gy-w1*0.15).attr('r',w1*0.13).attr('fill',c).attr('opacity',0.95); });
 }
+function rD3Ready(){ return typeof d3!=='undefined' && d3 && typeof d3.hierarchy==='function' && typeof d3.tree==='function' && typeof d3.zoom==='function' && typeof d3.linkRadial==='function'; }
 function ensureRadial(){
   if(rInit) return;
   var host=document.getElementById('rvp');
-  if(typeof d3==='undefined'){ if(!rHintDone){ rHintDone=true; host.insertAdjacentHTML('beforeend','<div class="r-msg">تعذّر تحميل مكتبة العرض (D3). تأكد من اتصال الإنترنت ثم أعد فتح «شجرة ٢».</div>'); } rInit=true; return; }
+  if(!rD3Ready()){
+    var ex=host.querySelector('.r-msg'); if(ex) ex.remove();
+    host.insertAdjacentHTML('beforeend','<div class="r-msg">جارٍ تحميل العرض الشعاعي…<span class="r-sub">لو تأخّر: تأكد من الإنترنت، أو افتح الرابط في Safari/Chrome بدل متصفّح واتساب الداخلي.</span></div>');
+    if(!rRetryTimer){ rRetryTimer=setInterval(function(){
+      if(rD3Ready()){ clearInterval(rRetryTimer); rRetryTimer=null;
+        var m=host.querySelector('.r-msg'); if(m) m.remove();
+        ensureRadial();
+        if(viewMode==='radial'){ requestAnimationFrame(function(){ rSizeSvg(); rFit(0); }); }
+      }
+    },400); }
+    return;   /* لا نقفل المحاولة؛ نعيد العرض تلقائيًا عند اكتمال D3 */
+  }
+  var _lm=host.querySelector('.r-msg'); if(_lm) _lm.remove();
+  try{
   rInit=true;
   rRootH=d3.hierarchy(DATA, function(d){return d.c;});
   var leaves=rRootH.leaves().length; rR=Math.max(950, leaves*3.4);
@@ -1326,6 +1344,11 @@ function ensureRadial(){
   if(zf) zf.onclick=function(){ rClearHL(); rFit(); };
   var rh=document.getElementById('rhint');
   if(rh){ setTimeout(function(){ rh.classList.add('hide'); }, 6000); rSvg.on('pointerdown.rhint', function(){ rh.classList.add('hide'); }); }
+  }catch(err){
+    rInit=false;                                  /* اسمح بإعادة المحاولة */
+    try{ var _em=host.querySelector('.r-msg'); if(_em) _em.remove();
+      host.insertAdjacentHTML('beforeend','<div class="r-msg">تعذّر رسم العرض الشعاعي.<span class="r-sub">أعد تحميل الصفحة، أو افتحها في Safari/Chrome.<br>('+((err&&err.message)?String(err.message).slice(0,90):'خطأ غير معروف')+')</span></div>'); }catch(_){}
+  }
 }
 
 /* ---- init ---- */
